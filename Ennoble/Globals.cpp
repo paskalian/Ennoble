@@ -77,6 +77,11 @@ bool Globals::Init()
 				NewMod.DataSecStart = NewMod.Address + pIdxSection->VirtualAddress;
 				NewMod.DataSecEnd = NewMod.DataSecStart + pIdxSection->Misc.VirtualSize;
 			}
+			else if (_stricmp((const char*)pIdxSection->Name, ".rdata") == 0)
+			{
+				NewMod.RDataSecStart = NewMod.Address + pIdxSection->VirtualAddress;
+				NewMod.RDataSecEnd = NewMod.RDataSecStart + pIdxSection->Misc.VirtualSize;
+			}
 		}
 
 		Modules.push_back(NewMod);
@@ -136,6 +141,9 @@ bool Globals::Execute()
 					{
 						bool bOffsetFound = false;
 
+						OffsetInfo NewOff = {};
+						NewOff.OffsetName = IdxOffset["name"];
+
 						if (IdxOffset["rtti_search"]["enabled"])
 						{
 							uintptr_t Limit = IdxOffset["rtti_search"]["limit"];
@@ -153,20 +161,25 @@ bool Globals::Execute()
 								{
 									uintptr_t PotentialInnerClass = *(uintptr_t*)(ClassInstanceAddr + i);
 
-									if (FoundMod.DataSecStart <= PotentialInnerClass && PotentialInnerClass <= FoundMod.DataSecEnd)
+									if ((FoundMod.DataSecStart <= PotentialInnerClass && PotentialInnerClass <= FoundMod.DataSecEnd) ||
+										(FoundMod.RDataSecStart <= PotentialInnerClass && PotentialInnerClass <= FoundMod.RDataSecEnd))
 									{
 										uintptr_t PotentialVTable = *(uintptr_t*)PotentialInnerClass;
 
-										if (FoundMod.DataSecStart <= PotentialVTable && PotentialVTable <= FoundMod.DataSecEnd)
+										if ((FoundMod.DataSecStart <= PotentialVTable && PotentialVTable <= FoundMod.DataSecEnd) || 
+											(FoundMod.RDataSecStart <= PotentialVTable && PotentialVTable <= FoundMod.RDataSecEnd))
 										{
 											uintptr_t PotentialFunctionCode = *(uintptr_t*)PotentialVTable;
 
 											if (FoundMod.TextSecStart <= PotentialFunctionCode && PotentialFunctionCode <= FoundMod.TextSecEnd)
 											{
 												std::vector<std::string> RttiList = GetRuntimeClassname((void*)PotentialInnerClass);
-												for (auto& IdxRtti : RttiList)
-													printf("RTTI: %s\n", IdxRtti.c_str());
-												printf("\n");
+												if (_stricmp(RttiList[0].c_str(), NewOff.OffsetName.c_str()) == 0)
+												{
+													NewOff.Offset = i;
+													FoundOffsets.push_back(NewOff);
+													bOffsetFound = true;
+												}
 											}
 										}
 									}
@@ -185,9 +198,6 @@ bool Globals::Execute()
 
 						if (!bOffsetFound)
 						{
-							OffsetInfo NewOff = {};
-							NewOff.OffsetName = IdxOffset["name"];
-
 							for (auto& IdxSignature : IdxOffset["signatures"])
 							{
 								std::string Pattern = IdxSignature["pattern"];

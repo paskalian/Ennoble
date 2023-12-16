@@ -12,6 +12,8 @@ struct ModuleInfo
 	uintptr_t TextSecEnd;
 	uintptr_t DataSecStart;
 	uintptr_t DataSecEnd;
+	uintptr_t RDataSecStart;
+	uintptr_t RDataSecEnd;
 };
 
 struct OffsetInfo
