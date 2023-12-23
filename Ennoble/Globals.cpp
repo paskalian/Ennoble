@@ -110,14 +110,16 @@ bool Globals::Execute()
 			std::ifstream JsonStream(ConfigPath.c_str());
 			json JsonData = json::parse(JsonStream);
 
-			std::string DumpFileName = "DumpResult-" + std::to_string(GetTickCount());
+			std::string DumpFileName = "DumpResult-" + std::to_string(GetTickCount64());
 			std::ofstream OutFile(DumpFileName.c_str(), std::ofstream::binary);
 		
 			std::vector<OffsetInfo> FoundOffsets = {};
 
+			OutFile << "=== CLASSES ===\n";
 			for (auto& IdxClass : JsonData["classes"])
 			{
 				bool bStringFound = false;
+				uintptr_t ClassInstanceAddr = 0;
 
 				ModuleInfo FoundMod = {};
 				std::string IdxClassName = IdxClass["class_name"];
@@ -148,12 +150,15 @@ bool Globals::Execute()
 						{
 							uintptr_t Limit = IdxOffset["rtti_search"]["limit"];
 
-							std::string ClassInstanceAddrString;
+							if (!ClassInstanceAddr)
+							{
+								std::string ClassInstanceAddrString;
 
-							printf("[*] Enter an instance to [%s]: ", IdxClassName.c_str());
-							std::cin >> ClassInstanceAddrString;
+								printf("[*] Enter an instance to [%s]: ", IdxClassName.c_str());
+								std::cin >> ClassInstanceAddrString;
 
-							uintptr_t ClassInstanceAddr = (uintptr_t)strtoll(ClassInstanceAddrString.c_str(), NULL, 0);
+								ClassInstanceAddr = (uintptr_t)strtoll(ClassInstanceAddrString.c_str(), NULL, 0);
+							}
 
 							try
 							{
@@ -191,9 +196,33 @@ bool Globals::Execute()
 							}
 						}
 
-						if (!bOffsetFound && IdxOffset["string_search"]["enabled"])
+						if (!bOffsetFound && IdxOffset["stringref_search"]["enabled"])
 						{
-							// Do string search.
+							std::string SearchedString = IdxOffset["stringref_search"]["string"];
+							std::string Pattern = IdxOffset["stringref_search"]["pattern"];
+							intptr_t    Limit = IdxOffset["stringref_search"]["limit"];
+							uintptr_t   Read = IdxOffset["stringref_search"]["read"];
+							bool bIsBackwards = Limit < 0;
+
+							std::vector<uintptr_t> FoundRefs = FindStringRefs(SearchedString, FoundMod);
+							for (auto& IdxRef : FoundRefs)
+							{
+								char* FoundAddress = (char*)FindPattern(bIsBackwards ? IdxRef + Limit : IdxRef, GetActualBytes(Pattern), abs(Limit));
+
+								if (FoundAddress)
+								{
+									NewOff.Offset = Read == 1 ? *(FoundAddress) :
+													Read == 2 ? *(uint16_t*)(FoundAddress) :
+													Read == 4 ? *(uint32_t*)(FoundAddress) :
+													0xDEADC0DE;
+
+									if (NewOff.Offset != 0xDEADC0DE)
+									{
+										FoundOffsets.push_back(NewOff);
+										bOffsetFound = true;
+									}
+								}
+							}
 						}
 
 						if (!bOffsetFound)
@@ -215,8 +244,8 @@ bool Globals::Execute()
 
 									if (NewOff.Offset != 0xDEADC0DE)
 									{
-										//printf("%X", NewOff.Offset);
 										FoundOffsets.push_back(NewOff);
+										bOffsetFound = true;
 									}
 
 									break;
@@ -235,17 +264,83 @@ bool Globals::Execute()
 				}
 			}
 
-		/*	for (auto& IdxFunction : JsonData["functions"])
+			OutFile << "=== FUNCTIONS ===\n";
+			for (auto& IdxFunction : JsonData["functions"])
 			{
-				auto Function = std::find(Modules.begin(), Modules.end(), IdxFunction["module"]);
-					
-				if (Function != Modules.end())
+				bool bStringFound = false;
+
+				ModuleInfo FoundMod = {};
+				std::string IdxFunctionName = IdxFunction["function_name"];
+				std::string IdxModName = IdxFunction["module"];
+				for (auto& IdxMod : Modules)
 				{
-					;
+					if (_stricmp(IdxModName.c_str(), IdxMod.Name.c_str()) == 0)
+					{
+						bStringFound = true;
+						FoundMod = IdxMod;
+					}
+				}
+
+				OutFile << "[" << IdxFunctionName.c_str() << "]\n";
+
+				if (bStringFound)
+				{
+					FoundOffsets.clear();
+
+					bool bFunctionFound = false;
+
+					if (IdxFunction["stringref_search"]["enabled"])
+					{
+						std::string SearchedString = IdxFunction["stringref_search"]["string"];
+						std::string Pattern = IdxFunction["stringref_search"]["pattern"];
+						intptr_t    Limit = IdxFunction["stringref_search"]["limit"];
+						bool bIsBackwards = Limit < 0;
+
+						std::vector<uintptr_t> FoundRefs = FindStringRefs(SearchedString, FoundMod);
+						for (auto& IdxRef : FoundRefs)
+						{
+							char* FoundAddress = (char*)FindPattern(bIsBackwards ? IdxRef + Limit : IdxRef, GetActualBytes(Pattern), abs(Limit));
+
+							if (FoundAddress)
+							{
+								OutFile << IdxFunctionName.c_str() << " - 0x" << std::hex << ((uintptr_t)FoundAddress) << std::dec << "\n";
+
+								bFunctionFound = true;
+
+								break;
+							}
+						}
+					}
+
+					if (!bFunctionFound)
+					{
+						for (auto& IdxSignature : IdxFunction["signatures"])
+						{
+							std::string Pattern = IdxSignature["pattern"];
+							intptr_t    Extra = IdxSignature["extra"];
+
+							char* FoundAddress = (char*)FindPattern(FoundMod.Address, GetActualBytes(Pattern), FoundMod.Size);
+
+							if (FoundAddress)
+							{
+								OutFile << IdxFunctionName.c_str() << " - 0x" << std::hex << ((uintptr_t)FoundAddress + Extra) << std::dec << "\n";
+
+								bFunctionFound = true;
+
+								break;
+							}
+						}
+					}
+
+					OutFile << "\n";
 				}
 				else
-					printf("[!] - Function search - Invalid module: %s\n", IdxFunction["module"]);
-			}*/
+				{
+					printf("[!] - Function search - Invalid module: %s\n", IdxModName.c_str());
+				}
+			}
+
+			printf("[*] Results dumped into %s\n", DumpFileName.c_str());
 
 			OutFile.close();
 		}
@@ -357,7 +452,7 @@ void* Globals::FindPattern(uintptr_t Start, const std::vector<uint8_t>& Pattern,
 		bool bPatternFound = true;
 		for (size_t j = 0; j < Pattern.size(); ++j)
 		{
-			if (Pattern[j] != '\x90' && Pattern[j] != *(PCHAR)(Start + i + j))
+			if (Pattern[j] != (unsigned char)'\x90' && Pattern[j] != *(unsigned char*)(Start + i + j))
 			{
 				bPatternFound = false;
 				break;
@@ -369,6 +464,85 @@ void* Globals::FindPattern(uintptr_t Start, const std::vector<uint8_t>& Pattern,
 	}
 
 	return nullptr;
+}
+
+#define LEA_INSTRUCTION_SIZE 7
+#define LEA_OFFSET 3
+
+std::vector<uintptr_t> Globals::FindStringRefs(const std::string& String, const ModuleInfo& ModInfo)
+{
+	uintptr_t StartAddr = ModInfo.TextSecStart;
+	uintptr_t EndAddr = ModInfo.TextSecEnd;
+	uintptr_t SearchLength = EndAddr - StartAddr;
+	uintptr_t Offset = 0;
+
+	std::vector<uintptr_t> Refs;
+
+#ifdef _WIN64
+	uintptr_t FoundInstruction = NULL;
+
+	// lea, [???]
+	static std::vector<uint8_t> SearchBytes = { (unsigned char)'\x48', (unsigned char)'\x8D', (unsigned char)'\x90' };
+#endif
+	
+#ifdef _WIN64
+	do
+	{
+		FoundInstruction = (uintptr_t)FindPattern(StartAddr + Offset, SearchBytes, SearchLength - Offset);
+		if (FoundInstruction)
+		{
+
+			// Offset becomes the first instruction AFTER lea.
+			Offset = (FoundInstruction + LEA_INSTRUCTION_SIZE) - StartAddr;
+
+			uint32_t PotentialStringOffset = *(uint32_t*)((uintptr_t)FoundInstruction + LEA_OFFSET);
+			uintptr_t PotentialStringAddr = (uintptr_t)FoundInstruction + LEA_INSTRUCTION_SIZE + PotentialStringOffset;
+
+			// Must be in .rdata section since we are searching for a static string.
+			if (PotentialStringAddr >= ModInfo.RDataSecStart && PotentialStringAddr <= ModInfo.RDataSecEnd)
+			{
+				std::string PotentialString = (const char*)PotentialStringAddr;
+				PotentialString.resize(MAX_PATH);
+
+				if (_stricmp(PotentialString.c_str(), String.c_str()) == 0)
+				{
+					Refs.push_back(FoundInstruction + LEA_INSTRUCTION_SIZE);
+				}
+			}
+		}
+	} while (FoundInstruction);
+#else
+	// There's probably a better way to do this task but anyways.
+
+	// Convert the given string into a byte array (which technically it already is but I can't cast a string into vector directly)
+	std::vector<uint8_t> StringBytes;
+	for (auto& IdxChar : String)
+		StringBytes.push_back(IdxChar);
+
+	const char* StringAddr = (const char*)FindPattern(ModInfo.Address, StringBytes, ModInfo.Size);
+
+	if (StringAddr)
+	{
+		// Convert the found string address into bytes so we can find it's references.
+		std::vector<uint8_t> StringAddrBytes;
+		for (unsigned int i = 0; i < sizeof(uint32_t); i++)
+			StringAddrBytes.push_back(*(uint8_t*)((uintptr_t)&StringAddr + i));
+
+		uintptr_t RefAddr = 0;
+		do
+		{
+			RefAddr = (uintptr_t)FindPattern(ModInfo.Address + Offset, StringAddrBytes, ModInfo.Size - Offset);
+			if (RefAddr)
+			{
+				Offset = RefAddr - ModInfo.Address + sizeof(uint32_t);
+
+				Refs.push_back(RefAddr + sizeof(uint32_t));
+			}
+		} while (RefAddr);
+	}
+#endif
+
+	return Refs;
 }
 
 std::vector<uint8_t> Globals::GetActualBytes(std::string Pattern)

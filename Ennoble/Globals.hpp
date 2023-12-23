@@ -36,6 +36,7 @@ public:
 	bool Init();
 	bool Execute();
 	void* FindPattern(uintptr_t Start, const std::vector<uint8_t>& Pattern, size_t SearchLength);
+	std::vector<uintptr_t> FindStringRefs(const std::string& String, const ModuleInfo& ModInfo);
 	std::vector<uint8_t> GetActualBytes(std::string Pattern);
 	std::vector<std::string> GetRuntimeClassname(void* pClassInstance);
 	std::vector<ModuleInfo> Modules;
