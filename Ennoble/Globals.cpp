@@ -162,28 +162,33 @@ bool Globals::Execute()
 
 							try
 							{
+								MEMORY_BASIC_INFORMATION MemInfo = {};
 								for (unsigned int i = sizeof(void*); i < Limit; i += sizeof(void*))
 								{
 									uintptr_t PotentialInnerClass = *(uintptr_t*)(ClassInstanceAddr + i);
 
-									if ((FoundMod.DataSecStart <= PotentialInnerClass && PotentialInnerClass <= FoundMod.DataSecEnd) ||
-										(FoundMod.RDataSecStart <= PotentialInnerClass && PotentialInnerClass <= FoundMod.RDataSecEnd))
+									if (VirtualQuery((LPCVOID)PotentialInnerClass, &MemInfo, sizeof(MEMORY_BASIC_INFORMATION)))
 									{
-										uintptr_t PotentialVTable = *(uintptr_t*)PotentialInnerClass;
-
-										if ((FoundMod.DataSecStart <= PotentialVTable && PotentialVTable <= FoundMod.DataSecEnd) || 
-											(FoundMod.RDataSecStart <= PotentialVTable && PotentialVTable <= FoundMod.RDataSecEnd))
+										if ((FoundMod.DataSecStart <= PotentialInnerClass && PotentialInnerClass <= FoundMod.DataSecEnd) ||
+											(FoundMod.RDataSecStart <= PotentialInnerClass && PotentialInnerClass <= FoundMod.RDataSecEnd) ||
+											(((MemInfo.Protect & PAGE_EXECUTE_READ) || ((MemInfo.Protect & PAGE_READWRITE)) || (MemInfo.Protect & PAGE_READONLY)) && PotentialInnerClass != UINTPTR_MAX))
 										{
-											uintptr_t PotentialFunctionCode = *(uintptr_t*)PotentialVTable;
+											uintptr_t PotentialVTable = *(uintptr_t*)PotentialInnerClass;
 
-											if (FoundMod.TextSecStart <= PotentialFunctionCode && PotentialFunctionCode <= FoundMod.TextSecEnd)
+											if ((FoundMod.DataSecStart <= PotentialVTable && PotentialVTable <= FoundMod.DataSecEnd) ||
+												(FoundMod.RDataSecStart <= PotentialVTable && PotentialVTable <= FoundMod.RDataSecEnd))
 											{
-												std::vector<std::string> RttiList = GetRuntimeClassname((void*)PotentialInnerClass);
-												if (_stricmp(RttiList[0].c_str(), NewOff.OffsetName.c_str()) == 0)
+												uintptr_t PotentialFunctionCode = *(uintptr_t*)PotentialVTable;
+
+												if (FoundMod.TextSecStart <= PotentialFunctionCode && PotentialFunctionCode <= FoundMod.TextSecEnd)
 												{
-													NewOff.Offset = i;
-													FoundOffsets.push_back(NewOff);
-													bOffsetFound = true;
+													std::vector<std::string> RttiList = GetRuntimeClassname((void*)PotentialInnerClass);
+
+													if (_stricmp(RttiList[0].c_str(), NewOff.OffsetName.c_str()) == 0)
+													{
+														NewOff.Offset = i;
+														bOffsetFound = true;
+													}
 												}
 											}
 										}
@@ -194,6 +199,11 @@ bool Globals::Execute()
 							{
 								printf("[!] Rtti search failed.\n");
 							}
+
+							if (!bOffsetFound)
+							{
+								printf("[!] Offset %s couldn't be found by rtti.\n", NewOff.OffsetName.c_str());
+							}
 						}
 
 						if (!bOffsetFound && IdxOffset["stringref_search"]["enabled"])
@@ -202,26 +212,45 @@ bool Globals::Execute()
 							std::string Pattern = IdxOffset["stringref_search"]["pattern"];
 							intptr_t    Limit = IdxOffset["stringref_search"]["limit"];
 							uintptr_t   Read = IdxOffset["stringref_search"]["read"];
+							intptr_t    Extra = IdxOffset["stringref_search"]["extra"];
 							bool bIsBackwards = Limit < 0;
 
-							std::vector<uintptr_t> FoundRefs = FindStringRefs(SearchedString, FoundMod);
-							for (auto& IdxRef : FoundRefs)
+							try
 							{
-								char* FoundAddress = (char*)FindPattern(bIsBackwards ? IdxRef + Limit : IdxRef, GetActualBytes(Pattern), abs(Limit));
-
-								if (FoundAddress)
+								std::vector<uintptr_t> FoundRefs = FindStringRefs(SearchedString, FoundMod);
+								for (const auto& IdxRef : FoundRefs)
 								{
-									NewOff.Offset = Read == 1 ? *(FoundAddress) :
-													Read == 2 ? *(uint16_t*)(FoundAddress) :
-													Read == 4 ? *(uint32_t*)(FoundAddress) :
-													0xDEADC0DE;
+									if (bOffsetFound)
+										break;
 
-									if (NewOff.Offset != 0xDEADC0DE)
+									unsigned int StartAddr = bIsBackwards ? (IdxRef - abs(Limit)) : IdxRef;
+									std::vector<uint8_t> ActualBytes = GetActualBytes(Pattern);
+									size_t SearchLength = abs(Limit);
+
+									char* FoundAddress = (char*)FindPattern(StartAddr, ActualBytes, SearchLength);
+
+									if (FoundAddress)
 									{
-										FoundOffsets.push_back(NewOff);
-										bOffsetFound = true;
+										NewOff.Offset = Read == 1 ? *(FoundAddress + Extra) :
+											Read == 2 ? *(uint16_t*)(FoundAddress + Extra) :
+											Read == 4 ? *(uint32_t*)(FoundAddress + Extra) :
+											0xDEADC0DE;
+
+										if (NewOff.Offset != 0xDEADC0DE)
+										{
+											bOffsetFound = true;
+										}
 									}
 								}
+							}
+							catch (...)
+							{
+								printf("[!] String search failed.\n");
+							}
+
+							if (!bOffsetFound)
+							{
+								printf("[!] Offset %s couldn't be found by string search.\n", NewOff.OffsetName.c_str());
 							}
 						}
 
@@ -244,19 +273,41 @@ bool Globals::Execute()
 
 									if (NewOff.Offset != 0xDEADC0DE)
 									{
-										FoundOffsets.push_back(NewOff);
 										bOffsetFound = true;
 									}
 
 									break;
 								}
+
+								if (!bOffsetFound)
+								{
+									printf("[!] Offset %s couldn't be found by signature [%s].\n", NewOff.OffsetName.c_str(), Pattern.c_str());
+								}
 							}
 						}
+
+						if (!bOffsetFound)
+						{
+							printf("[!] Offset %s couldn't be found.\n", NewOff.OffsetName.c_str());
+						}
+
+						FoundOffsets.push_back(NewOff);
 					}
 
+					std::sort(FoundOffsets.begin(), FoundOffsets.end(), [](const OffsetInfo& a, const OffsetInfo& b)
+						{
+							return a.Offset < b.Offset;
+						});
+
+					printf("OFFSETS FOR %s\n", IdxClassName.c_str());
 					for (auto& IdxFoundOffset : FoundOffsets)
+					{
 						OutFile << IdxFoundOffset.OffsetName << " - 0x" << std::hex << IdxFoundOffset.Offset << std::dec << "\n";
+						printf("  - 0x%X %s\n", IdxFoundOffset.Offset, IdxFoundOffset.OffsetName.c_str());
+					}
 					OutFile << "\n";
+
+					printf("[*] %s done.\n", IdxClassName.c_str());
 				}
 				else
 				{
@@ -281,8 +332,6 @@ bool Globals::Execute()
 					}
 				}
 
-				OutFile << "[" << IdxFunctionName.c_str() << "]\n";
-
 				if (bStringFound)
 				{
 					FoundOffsets.clear();
@@ -299,16 +348,21 @@ bool Globals::Execute()
 						std::vector<uintptr_t> FoundRefs = FindStringRefs(SearchedString, FoundMod);
 						for (auto& IdxRef : FoundRefs)
 						{
-							char* FoundAddress = (char*)FindPattern(bIsBackwards ? IdxRef + Limit : IdxRef, GetActualBytes(Pattern), abs(Limit));
+							char* FoundAddress = (char*)FindPattern(bIsBackwards ? (IdxRef + Limit) : IdxRef, GetActualBytes(Pattern), abs(Limit));
 
 							if (FoundAddress)
 							{
-								OutFile << IdxFunctionName.c_str() << " - 0x" << std::hex << ((uintptr_t)FoundAddress) << std::dec << "\n";
+								OutFile << IdxFunctionName.c_str() << " - 0x" << std::hex << ((uintptr_t)FoundAddress - FoundMod.Address) << std::dec << "\n";
 
 								bFunctionFound = true;
 
 								break;
 							}
+						}
+
+						if (!bFunctionFound)
+						{
+							printf("[!] Function %s couldn't be found by string search.\n", IdxFunctionName.c_str());
 						}
 					}
 
@@ -323,11 +377,16 @@ bool Globals::Execute()
 
 							if (FoundAddress)
 							{
-								OutFile << IdxFunctionName.c_str() << " - 0x" << std::hex << ((uintptr_t)FoundAddress + Extra) << std::dec << "\n";
+								OutFile << IdxFunctionName.c_str() << " - 0x" << std::hex << ((uintptr_t)FoundAddress + Extra - FoundMod.Address) << std::dec << "\n";
 
 								bFunctionFound = true;
 
 								break;
+							}
+
+							if (!bFunctionFound)
+							{
+								printf("[!] Function %s couldn't be found by signature [%s].\n", IdxFunctionName.c_str(), Pattern.c_str());
 							}
 						}
 					}
@@ -471,6 +530,8 @@ void* Globals::FindPattern(uintptr_t Start, const std::vector<uint8_t>& Pattern,
 
 std::vector<uintptr_t> Globals::FindStringRefs(const std::string& String, const ModuleInfo& ModInfo)
 {
+	
+
 	uintptr_t StartAddr = ModInfo.TextSecStart;
 	uintptr_t EndAddr = ModInfo.TextSecEnd;
 	uintptr_t SearchLength = EndAddr - StartAddr;
@@ -519,7 +580,7 @@ std::vector<uintptr_t> Globals::FindStringRefs(const std::string& String, const 
 	for (auto& IdxChar : String)
 		StringBytes.push_back(IdxChar);
 
-	const char* StringAddr = (const char*)FindPattern(ModInfo.Address, StringBytes, ModInfo.Size);
+	const char* StringAddr = (const char*)FindPattern(ModInfo.Address, StringBytes, ModInfo.Size - 1);
 
 	if (StringAddr)
 	{
@@ -531,7 +592,7 @@ std::vector<uintptr_t> Globals::FindStringRefs(const std::string& String, const 
 		uintptr_t RefAddr = 0;
 		do
 		{
-			RefAddr = (uintptr_t)FindPattern(ModInfo.Address + Offset, StringAddrBytes, ModInfo.Size - Offset);
+			RefAddr = (uintptr_t)FindPattern(ModInfo.Address + Offset, StringAddrBytes, ModInfo.Size - 1 - Offset);
 			if (RefAddr)
 			{
 				Offset = RefAddr - ModInfo.Address + sizeof(uint32_t);
