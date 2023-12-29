@@ -9,4 +9,4 @@
 
 ## Introduction
 
-Ennoble is as it states an easy to use dynamic memory searcher and offset dumper.
+Ennoble as it states is an easy to use dynamic memory searcher and offset dumper.
