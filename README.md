@@ -37,6 +37,8 @@ There are two main arrays which **must** be in all configurations.
 
 Classes and Functions are as their name also states is the two base arrays used for checking which classes and functions you are planning to dump.
 
+Here is the mainframe of configurations.
+
 <hr>
 
 <p align="center">
