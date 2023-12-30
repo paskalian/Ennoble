@@ -97,4 +97,30 @@ classes ➜ Base array for which classes to dump.
               |
               ↳ read ➜ Amount of bytes to read after finding the pattern and adding
                         or subtracting the extra from the found pattern address.
+
+functions ➜ Base array for which functions to dump.
+   |
+   ↳ function_name ➜ The function name.
+   |
+   ↳ module ➜ The module which the function will be searched on.
+   |
+   ↳ stringref_search ➜ An object controlling string reference search.
+   |     |
+   |     ↳ enabled ➜ true/false, is string reference search enabled or not.
+   |     |
+   |     ↳ string ➜ The string to search it's references and use that reference as a base.
+   |     |
+   |     ↳ pattern ➜ The byte pattern to search for using the string reference as the base address.
+   |     |
+   |     ↳ limit ➜ Max distance to take from the base address, if it's negative then it will subtract
+   |     |          that from the base address and use the result as the new base address, which will
+   |     |          search until the old base address.
+   |     |
+   |     ↳ extra ➜ Amount of bytes to add or subtract from the found pattern address.
+   |
+   ↳ signatures ➜ An object controlling signature search.
+         |
+         ↳ pattern ➜ The byte pattern to search for using the module base as the base address.
+         |
+         ↳ extra ➜ Amount of bytes to add or subtract from the found pattern address.
 </pre>
