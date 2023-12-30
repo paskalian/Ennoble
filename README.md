@@ -45,6 +45,8 @@ Classes and Functions are as their name also states is the two base arrays used 
 
 <hr>
 
+<br>
+
 There are two important things to keep in mind:
 1. If an object's enabled member is set to false, the following members are not required to be set. (can be set but will be ignored eventually)
 2. Unlike classes, functions doesn't have the read member on it's object, this is because it will not read anything from the code to get the offset.
