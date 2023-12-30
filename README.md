@@ -126,3 +126,84 @@ functions ➜ Base array for which functions to dump.
          |
          ↳ extra ➜ Amount of bytes to add or subtract from the found pattern address.
 </pre>
+
+<br>
+
+An example configuration file made for notepad.
+```json
+{
+  "classes": [
+    {
+      "class_name": "ExampleClass",
+      "module": "notepad.exe",
+      "offsets": [
+        {
+          "name": "iSomeInteger",
+          "rtti_search": {
+            "enabled": false,
+            "limit": 500
+          },
+          "stringref_search": {
+            "enabled": true,
+            "string": "Before THIS string is the code indexing into iSomeInteger offset",
+            "pattern": "16 ?? 00",
+            "limit": -50,
+            "read": 4,
+            "extra": 0
+          },
+          "signatures": [
+            {
+              "pattern": "19 17 AD ?? ?? ?? BB",
+              "extra": 2,
+              "read": 4
+            },
+            {
+              "pattern": "C2 A7 79 5A ?? 27",
+              "extra": 2,
+              "read": 4
+            },
+            {
+              "pattern": "8B 86 ?? ?? ?? ?? 83",
+              "extra": 0,
+              "read": 2
+            }
+          ]
+        },
+        {
+          "name": "ExampleRttiClass",
+          "rtti_search": {
+            "enabled": true,
+            "limit": 500
+          },
+          "stringref_search": {
+            "enabled": false
+          },
+          "signatures": []
+        }
+      ]
+    }
+  ],
+  "functions": [
+    {
+      "function_name": "ExampleFunction",
+      "module": "notepad.exe",
+      "stringref_search": {
+        "enabled": true,
+        "string": "StringToSearch",
+        "pattern": "12 34 ?? ?? 56 AB",
+        "limit": -50
+      },
+      "signatures": [
+        {
+          "pattern": "34 12 15 ?? 56 BA",
+          "extra": 0
+        },
+        {
+          "pattern": "12 34 AC ?? ?? AB",
+          "extra": 4
+        }
+      ]
+    }
+  ]
+}
+```
