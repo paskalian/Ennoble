@@ -5,6 +5,7 @@
 <p align="center">
   <img alt="license" src="https://img.shields.io/badge/License-MIT-green.svg"/>
   <img alt="platform" src="https://img.shields.io/badge/Platform-Windows-green.svg"/>
+  <img alt="architecture" src="https://img.shields.io/badge/Architecture-x64/x86-green.svg"/>
 </p>
 
 ## Introduction
