@@ -36,3 +36,12 @@ There are two main arrays which **must** be in all configurations.
 <br>
 
 Classes and Functions are as their name also states is the two base arrays used for checking which classes and functions you are planning to dump.
+
+<br>
+<hr>
+
+<p align="center">
+  <img alt="license" src="https://github.com/paskalian/Ennoble/blob/master/Images/EnnobleMainframe.png"/>
+</p>
+
+<hr>
