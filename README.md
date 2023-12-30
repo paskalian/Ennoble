@@ -79,10 +79,13 @@ classes ➜ Base array for which classes to dump.
         |     |
         |     ↳ pattern ➜ The byte pattern to search for using the string reference as the base address.
         |     |
-        |     ↳ limit ➜ Max distance to take from the base address, if it's negative then it will subtract that from the base address and use
-        |     |          the result as the new base address, which will search until the old base address.
+        |     ↳ limit ➜ Max distance to take from the base address, if it's negative then it will subtract
+        |     |          that from the base address and use the result as the new base address, which will
+        |     |          search until the old base address.
+        |     |          
         |     |
-        |     ↳ read ➜ Amount of bytes to read after finding the pattern and adding or subtracting the extra from the found pattern address.
+        |     ↳ read ➜ Amount of bytes to read after finding the pattern and adding
+        |     |         or subtracting the extra from the found pattern address.
         |     |
         |     ↳ extra ➜ Amount of bytes to add or subtract from the found pattern address.
         |
@@ -92,5 +95,6 @@ classes ➜ Base array for which classes to dump.
               |
               ↳ extra ➜ Amount of bytes to add or subtract from the found pattern address.
               |
-              ↳ read ➜ Amount of bytes to read after finding the pattern and adding or subtracting the extra from the found pattern address.
+              ↳ read ➜ Amount of bytes to read after finding the pattern and adding
+                        or subtracting the extra from the found pattern address.
 </pre>
